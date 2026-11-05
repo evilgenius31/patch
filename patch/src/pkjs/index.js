@@ -807,11 +807,15 @@ Pebble.addEventListener('ready', function() {
 var OAUTH_CONFIG = {
   clientId: 'b9260194-8028-48ae-8907-e30182eda409', // Shared default client ID (BYO override available in config page)
   tenantId: 'common', // Use 'common' for multi-tenant, or your specific tenant ID
-  redirectUri: 'https://mattnovelli.github.io/patch/', // Hosted OAuth receiver page (GitHub Pages /docs)
+  redirectUri: 'https://evilgenius31.github.io/patch/', // Hosted OAuth receiver page (GitHub Pages /docs)
   scope: 'https://graph.microsoft.com/Mail.Send offline_access',
   responseType: 'code', // Using authorization code with PKCE
   responseMode: 'query' // Authorization code callback in query params
 };
+
+// Upstream's shared client, registered with an SPA redirect URI: its token requests
+// must carry an Origin header. Any other client (Web/native) must not get one.
+var SHARED_SPA_CLIENT_ID = 'b9260194-8028-48ae-8907-e30182eda409';
 
 // Hosted configuration page URL (typically a GitHub Pages URL).
 // This page should handle OAuth and return settings via pebblejs://close#<json>
@@ -918,7 +922,7 @@ function setTokenRequestHeaders(xhr, redirectUri, clientId) {
   // tokens die 24h after sign-in no matter how often they are refreshed. The
   // shared client needs it; a self-hosted Web/native client must not get it,
   // which is what gives it 90-day sliding refresh tokens.
-  if (normalizeClientId(clientId) !== OAUTH_CONFIG.clientId) {
+  if (normalizeClientId(clientId).toLowerCase() !== SHARED_SPA_CLIENT_ID) {
     return;
   }
 
