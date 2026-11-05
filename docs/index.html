@@ -1715,6 +1715,9 @@
               "&scope=" +
               encodeURIComponent(getScope()) +
               "&response_mode=query" +
+              // Always show the account picker; otherwise Microsoft silently reuses
+              // whichever account last signed in, so switching accounts is impossible.
+              "&prompt=select_account" +
               "&state=" +
               encodeURIComponent(state) +
               "&code_challenge=" +
