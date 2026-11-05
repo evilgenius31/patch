@@ -125,13 +125,17 @@ static void summarize_error_message(const char *raw_message, char *dest, size_t 
 
   const char *summary = "Message could not be sent.";
   if (raw_message) {
-    if (contains_case_insensitive(raw_message, "sign in") ||
-        contains_case_insensitive(raw_message, "session expired") ||
-        contains_case_insensitive(raw_message, "auth")) {
-      summary = "Sign in required. Re-open Patch settings.";
-    } else if (contains_case_insensitive(raw_message, "network") ||
-               contains_case_insensitive(raw_message, "timeout")) {
+    // Check transient failures first: the phone's retryable refresh error reads
+    // "Temporary network/auth service issue...", which must not look like a logout.
+    if (contains_case_insensitive(raw_message, "network") ||
+        contains_case_insensitive(raw_message, "timeout") ||
+        contains_case_insensitive(raw_message, "timed out") ||
+        contains_case_insensitive(raw_message, "temporary")) {
       summary = "Connection issue. Check phone network and retry.";
+    } else if (contains_case_insensitive(raw_message, "sign in") ||
+               contains_case_insensitive(raw_message, "session expired") ||
+               contains_case_insensitive(raw_message, "auth")) {
+      summary = "Sign in required. Re-open Patch settings.";
     } else if (contains_case_insensitive(raw_message, "permission")) {
       summary = "Permission denied for Outlook send.";
     } else if (contains_case_insensitive(raw_message, "contact")) {
@@ -1141,6 +1145,13 @@ static void init(void) {
   app_message_register_outbox_sent(outbox_sent);
   app_message_register_outbox_failed(outbox_failed);
   app_message_open(512, 512);
+
+#ifdef PBL_TOUCH
+  // Third-party apps are opted out of the system touch bridge by default. Opting in
+  // maps swipes/taps on the MenuLayers to scroll/select when the user has touch
+  // navigation enabled system-wide.
+  app_touch_navigation_enable(true);
+#endif
 
 #ifdef PBL_COLOR
   s_sent_sequence = gdraw_command_sequence_create_with_resource(RESOURCE_ID_SENT_SEQUENCE);
