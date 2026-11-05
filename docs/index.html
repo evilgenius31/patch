@@ -709,29 +709,32 @@
                       >review the code on GitHub before continuing.</a
                     >
                   </div>
-                  <div class="btn-row option-actions">
-                    <button id="loginButton" class="primary" type="button">
-                      Sign in with Microsoft
+                  <!-- Moved into whichever option is selected; see updateCustomClientRow. -->
+                  <div id="authControls">
+                    <div class="btn-row option-actions">
+                      <button id="loginButton" class="primary" type="button">
+                        Sign in with Microsoft
+                      </button>
+                    </div>
+                    <div
+                      id="authStatus"
+                      class="status"
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                      style="margin-top: 10px"
+                    >
+                      Not signed in.
+                    </div>
+                    <button
+                      id="signOutButton"
+                      class="btn secondary"
+                      type="button"
+                      style="display: none; margin-top: 8px"
+                    >
+                      Sign Out
                     </button>
                   </div>
-                  <div
-                    id="authStatus"
-                    class="status"
-                    role="status"
-                    aria-live="polite"
-                    aria-atomic="true"
-                    style="margin-top: 10px"
-                  >
-                    Not signed in.
-                  </div>
-                  <button
-                    id="signOutButton"
-                    class="btn secondary"
-                    type="button"
-                    style="display: none; margin-top: 8px"
-                  >
-                    Sign Out
-                  </button>
                 </div>
               </div>
 
@@ -762,6 +765,7 @@
                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                     />
                   </div>
+                  <div id="customAuthSlot"></div>
                   <ol class="tutorial">
                     <li>
                       Start from
@@ -1086,8 +1090,21 @@
         }
 
         function updateCustomClientRow() {
+          var useCustom = isUsingCustomClient();
           document.getElementById("customClientDetails").style.display =
-            isUsingCustomClient() ? "block" : "none";
+            useCustom ? "block" : "none";
+
+          // Keep one set of sign-in controls and show it under the selected
+          // option, so Option 2 has its own "Sign in with Microsoft" button.
+          var controls = document.getElementById("authControls");
+          var target = useCustom
+            ? document.getElementById("customAuthSlot")
+            : document.querySelector("#authOptionShared")
+                .closest(".option-card")
+                .querySelector(".option-content");
+          if (controls && target && controls.parentNode !== target) {
+            target.appendChild(controls);
+          }
         }
 
         function getClientId() {
