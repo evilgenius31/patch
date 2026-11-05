@@ -726,6 +726,11 @@
                     >
                       Not signed in.
                     </div>
+                    <div
+                      id="sendErrorStatus"
+                      class="status mono"
+                      style="display: none; margin-top: 6px"
+                    ></div>
                     <button
                       id="signOutButton"
                       class="btn secondary"
@@ -1383,6 +1388,18 @@
           callback(null, verifier, "plain");
         }
 
+        // PKJS passes the last failed send (Graph error code and message) so it
+        // can be read here without capturing phone logs.
+        function showLastSendError() {
+          var el = document.getElementById("sendErrorStatus");
+          var lastSendError = getParam("send_error");
+          if (!el || !lastSendError) {
+            return;
+          }
+          el.innerHTML = "Last send error: " + escapeHtml(lastSendError);
+          el.style.display = "block";
+        }
+
         function setAuthStatus(text, ok) {
           var status = document.getElementById("authStatus");
           status.className = ok ? "status ok" : "status";
@@ -1833,6 +1850,7 @@
         loadSettings();
         initUI();
         renderAuthStatus();
+        showLastSendError();
         maybeHandleOAuthCallback();
 
         // Persist collapsible section open/closed state

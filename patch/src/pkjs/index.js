@@ -402,6 +402,7 @@ function sendEmailWithFetch(accessToken, body, contact, onUnauthorized) {
   Promise.race([fetchPromise, timeoutPromise])
     .then(function(result) {
       console.log('Email sending completed successfully!');
+      clearSendError();
       var msg = {};
       msg[KEY_STATUS] = 'Email sent to ' + contact.name + '!';
       Pebble.sendAppMessage(msg);
@@ -423,6 +424,7 @@ function sendEmailWithXHR(accessToken, body, contact, onUnauthorized) {
       
       if (xhr.status === 202 || xhr.status === 200) {
         console.log('SUCCESS: Email sent successfully via XHR');
+        clearSendError();
         var msg = {};
         msg[KEY_STATUS] = 'Email sent to ' + contact.name + '!';
         Pebble.sendAppMessage(msg);
@@ -458,19 +460,27 @@ function handleEmailError(err, contact, onUnauthorized) {
 
   var errorMsg = String(err && err.message || err);
   var lowerMsg = errorMsg.toLowerCase();
-  var isUnauthorized = errorMsg.indexOf('HTTP 401') === 0 || lowerMsg.indexOf('unauthorized') !== -1;
+  // Classify by the HTTP status at the start of the message, not by digits that
+  // happen to appear anywhere in Graph's response body (request IDs, dates).
+  var statusMatch = errorMsg.match(/^HTTP (\d{3})/);
+  var status = statusMatch ? Number(statusMatch[1]) : 0;
+  var isUnauthorized = status === 401;
 
   if (isUnauthorized && typeof onUnauthorized === 'function') {
     onUnauthorized();
     return;
   }
 
+  rememberSendError(status, errorMsg);
+
   if (isUnauthorized) {
     errorMsg = 'Access token expired - please sign in again';
-  } else if (lowerMsg.indexOf('403') !== -1 || lowerMsg.indexOf('forbidden') !== -1) {
+  } else if (status === 403) {
     errorMsg = 'Permission denied - check token permissions';
-  } else if (lowerMsg.indexOf('400') !== -1) {
+  } else if (status === 400) {
     errorMsg = 'Invalid email format';
+  } else if (status === 429) {
+    errorMsg = 'Outlook is rate limiting sends - wait and retry';
   } else if (lowerMsg.indexOf('timeout') !== -1) {
     errorMsg = 'Request timed out - check connection';
   } else if (lowerMsg.indexOf('network') !== -1 || lowerMsg.indexOf('fetch') !== -1) {
@@ -485,6 +495,56 @@ function handleEmailError(err, contact, onUnauthorized) {
 
   if (errorMsg.indexOf('sign in') !== -1 || errorMsg.indexOf('expired') !== -1) {
     sendAuthStateToWatch(AUTH_STATE_REAUTH_REQUIRED);
+  }
+}
+
+// Last Graph sendMail failure, shown on the config page (Graph error code and
+// message only; the response body never contains tokens).
+var LAST_SEND_ERROR_STORAGE_KEY = 'patch_last_send_error';
+
+function rememberSendError(status, rawMessage) {
+  var text = String(rawMessage || '');
+  var bodyStart = text.indexOf('{');
+  var detail = '';
+
+  if (bodyStart !== -1) {
+    try {
+      var body = JSON.parse(text.slice(bodyStart));
+      var graphError = (body && body.error) || {};
+      detail = [graphError.code, graphError.message].filter(Boolean).join(': ');
+    } catch (e) {
+      detail = '';
+    }
+  }
+
+  if (!detail) {
+    detail = text.replace(/^HTTP \d{3}:\s*/, '');
+  }
+  if (detail.length > 200) {
+    detail = detail.slice(0, 200) + '...';
+  }
+
+  try {
+    localStorage.setItem(LAST_SEND_ERROR_STORAGE_KEY,
+      (status ? 'HTTP ' + status + ': ' : '') + detail + ' (' + new Date().toLocaleString() + ')');
+  } catch (e) {
+    console.log('Unable to store last send error: ' + e);
+  }
+}
+
+function clearSendError() {
+  try {
+    localStorage.removeItem(LAST_SEND_ERROR_STORAGE_KEY);
+  } catch (e) {
+    // ignore
+  }
+}
+
+function getLastSendError() {
+  try {
+    return String(localStorage.getItem(LAST_SEND_ERROR_STORAGE_KEY) || '');
+  } catch (e) {
+    return '';
   }
 }
 
@@ -1138,6 +1198,11 @@ function buildConfigPageUrl(settings, authConfig, options) {
   var lastAuthError = getLastAuthError();
   if (lastAuthError && authState === AUTH_STATE_REAUTH_REQUIRED) {
     parts.push('auth_error=' + encodeURIComponent(lastAuthError));
+  }
+
+  var lastSendError = getLastSendError();
+  if (lastSendError) {
+    parts.push('send_error=' + encodeURIComponent(lastSendError));
   }
 
   return CONFIG_PAGE_URL + sep + parts.join('&');
