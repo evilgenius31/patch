@@ -1577,7 +1577,16 @@
 
           if (authState === 2) {
             // AUTH_STATE_REAUTH_REQUIRED
-            setAuthStatus("Session expired. Sign in again to continue.", false);
+            var lastAuthError = getParam("auth_error");
+            setAuthStatus(
+              "Session expired. Sign in again to continue." +
+                (lastAuthError
+                  ? '<br /><span class="mono">Last error: ' +
+                    escapeHtml(lastAuthError) +
+                    "</span>"
+                  : ""),
+              false,
+            );
             if (signOutBtn) signOutBtn.style.display = "none";
             if (loginBtn) loginBtn.style.display = "inline-block";
             return;

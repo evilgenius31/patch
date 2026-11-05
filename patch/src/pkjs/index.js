@@ -1051,6 +1051,49 @@ function parseCodeRedeemFailure(status, responseText) {
   });
 }
 
+// The last sign-in/refresh failure, shown on the config page so users can see
+// Microsoft's actual error without capturing phone logs.
+var LAST_AUTH_ERROR_STORAGE_KEY = 'patch_last_auth_error';
+
+function describeAuthError(error) {
+  if (!error) {
+    return '';
+  }
+
+  var code = String(error.errorCode || error.code || 'error');
+  var description = String(error.errorDescription || error.message || '');
+  var aadsts = description.match(/AADSTS\d+/);
+  // Microsoft descriptions end with trace/correlation IDs; keep the readable part.
+  var firstLine = description.split(/\r?\n|Trace ID:/)[0].trim();
+  if (firstLine.length > 200) {
+    firstLine = firstLine.slice(0, 200) + '...';
+  }
+
+  var status = error.status ? ' (HTTP ' + error.status + ')' : '';
+  return code + status + (aadsts && firstLine.indexOf(aadsts[0]) === -1 ? ' ' + aadsts[0] : '') +
+    (firstLine ? ': ' + firstLine : '');
+}
+
+function rememberAuthError(error) {
+  try {
+    if (error) {
+      localStorage.setItem(LAST_AUTH_ERROR_STORAGE_KEY, describeAuthError(error));
+    } else {
+      localStorage.removeItem(LAST_AUTH_ERROR_STORAGE_KEY);
+    }
+  } catch (e) {
+    console.log('Unable to store last auth error: ' + e);
+  }
+}
+
+function getLastAuthError() {
+  try {
+    return String(localStorage.getItem(LAST_AUTH_ERROR_STORAGE_KEY) || '');
+  } catch (e) {
+    return '';
+  }
+}
+
 function getRefreshRetryDelayMs(attemptNumber) {
   return TOKEN_REFRESH_BASE_RETRY_MS * Math.pow(2, attemptNumber - 1);
 }
@@ -1091,6 +1134,11 @@ function buildConfigPageUrl(settings, authConfig, options) {
     'auth_state=' + authState,
     'auto_persist=' + (autoPersist ? '1' : '0')
   ];
+
+  var lastAuthError = getLastAuthError();
+  if (lastAuthError && authState === AUTH_STATE_REAUTH_REQUIRED) {
+    parts.push('auth_error=' + encodeURIComponent(lastAuthError));
+  }
 
   return CONFIG_PAGE_URL + sep + parts.join('&');
 }
@@ -1416,6 +1464,7 @@ function ensureValidToken(callback, options) {
     if (error) {
       console.log('Token refresh failed in PKJS: ' + JSON.stringify(error));
       if (error.requiresReauth) {
+        rememberAuthError(error);
         sendAuthStateToWatch(AUTH_STATE_REAUTH_REQUIRED);
       }
       flushRefreshWaiters(error, null);
@@ -1592,6 +1641,7 @@ Pebble.addEventListener('webviewclosed', function(e) {
   redeemAuthorizationCodeWithRetry(authPayload, function(error, tokens) {
     if (error) {
       console.log('Authorization code redemption failed: ' + JSON.stringify(error));
+      rememberAuthError(error);
 
       if (error.requiresReauth) {
         sendAuthStateToWatch(AUTH_STATE_REAUTH_REQUIRED);
@@ -1611,6 +1661,7 @@ Pebble.addEventListener('webviewclosed', function(e) {
     };
     var mergedSettings = applyTokenDataToSettings(latestSettings, tokens, authConfig);
     setSettings(mergedSettings);
+    rememberAuthError(null);
 
     sendAuthStateToWatch(AUTH_STATE_OK);
 
